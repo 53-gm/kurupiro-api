@@ -12,7 +12,6 @@ def hello_world():
     return {"message": "Hello World2"}
 
 
-@app.get("/api/{stop_name}")
-def next_bus(stop_name: str):
-    df_test = gtfs_static.today_bus_times(stop_name=stop_name)
-    return Response(df_test.iloc[1].to_json(), media_type="application/json")
+@app.get("/api/{stop_id}/{dest_stop_id}")
+def next_bus(stop_id: str, dest_stop_id: str, opt: bool = False):
+    return gtfs_static.next_bus_time(stop_id, dest_stop_id, opt)

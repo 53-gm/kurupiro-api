@@ -27,31 +27,27 @@ def generate_gtfs_data():
 
     # 必要なtxtファイルをGTFS staticから読み込み
     stop_times = pd.read_csv(DATA_DIR + "/stop_times.txt")
+    stop_times["stop_id"] = stop_times["stop_id"].apply(lambda id: id.replace(" ", "_"))
     trips = pd.read_csv(DATA_DIR + "/trips.txt")
     calendar = pd.read_csv(DATA_DIR + "/calendar.txt")
     routes = pd.read_csv(DATA_DIR + "/routes.txt")
     stops = pd.read_csv(DATA_DIR + "/stops.txt")
-    stops_direction = pd.read_csv(DATA_DIR + "/stops_direction.txt")
-    routes_jp = pd.read_csv(DATA_DIR + "/routes_jp.txt")
+    stops["stop_id"] = stops["stop_id"].apply(lambda id: id.replace(" ", "_"))
 
     # データ整形
     df = pd.merge(stop_times, trips, on="trip_id")
     df2 = pd.merge(df, calendar, on="service_id")
     df3 = pd.merge(df2, routes, on="route_id")
     df4 = pd.merge(df3, stops, on="stop_id")
-    df5 = pd.merge(df4, stops_direction, on="stop_id")
-    df6 = pd.merge(df5, routes_jp, on="route_id")
 
     # 保存
-    df_result = df6[
+    df_result = df4[
         [
+            "trip_id",
             "stop_id",
-            "stop_name",
+            "route_id",
             "arrival_time",
-            "stop_headsign",
-            "trip_headsign",
-            "route_long_name",
-            "jp_parent_route_id",
+            "stop_sequence",
             "monday",
             "tuesday",
             "wednesday",
@@ -77,31 +73,71 @@ weekday_dic = {
 }
 
 
-# 今日来るバスの時刻表を取得 (引数: 停留所)
-def today_bus_times(stop_name: str):
-    now_time = datetime.datetime.now() + datetime.timedelta(hours=9)
-    now_date = now_time.strftime("%Y-%m-%d")
-    now_weekday = weekday_dic[now_time.weekday()]
+def find_stop_from_trip_id(trip_id, dest_stop_id, now_stop_sequence, opt=False):
 
     df_gtfs = pd.read_csv(DATA_DIR + "/gtfs-static.csv")
 
-    df_stop = df_gtfs[(df_gtfs["stop_name"] == stop_name) & (df_gtfs[now_weekday] == 1)]
-    df_stop["arrival_time"] = df_stop["arrival_time"].apply(
+    df_trip = df_gtfs[df_gtfs["trip_id"] == trip_id]
+
+    if opt:
+        df_trip.loc[:, "stop_id"] = df_trip["stop_id"].apply(
+            lambda id: id.split("_")[0]
+        )
+
+    df = df_trip[
+        (df_trip["stop_sequence"] > now_stop_sequence)
+        & (df_trip["stop_id"] == dest_stop_id)
+    ]
+
+    return df
+
+
+def next_bus_time(now_stop_id, dest_stop_id, opt=False):
+    now_time = datetime.datetime.now() + datetime.timedelta(hours=9)
+    now_weekday = weekday_dic[now_time.weekday()]
+    now_date = now_time.strftime("%Y-%m-%d")
+
+    df_gtfs = pd.read_csv(DATA_DIR + "/gtfs-static.csv")
+
+    df_active_bus = df_gtfs[
+        (df_gtfs["stop_id"] == now_stop_id) & (df_gtfs[now_weekday] == 1)
+    ]
+
+    df_stop_filter_from_time = df_active_bus[
+        df_active_bus["arrival_time"].apply(lambda x: int(x[0:2]) >= now_time.hour)
+    ]
+
+    df_stop_filter_from_time["arrival_time"] = df_stop_filter_from_time[
+        "arrival_time"
+    ].apply(
         lambda x: datetime.datetime.strptime((now_date + " " + x), "%Y-%m-%d %H:%M:%S")
     )
+    df_stop_filter_from_time = df_stop_filter_from_time.sort_values("arrival_time")
 
-    df_stop_and_time = df_stop[df_stop["arrival_time"] > now_time].sort_values(
-        "arrival_time"
-    )
+    for index, row in df_stop_filter_from_time.iterrows():
+        res = find_stop_from_trip_id(
+            row["trip_id"], dest_stop_id, row["stop_sequence"], opt
+        )
+        if not res.empty:
 
-    print(df_stop_and_time)
+            res = res.iloc[0]
 
-    return df_stop_and_time
+            dic = {
+                "trip_id": row["trip_id"],
+                "route_id": row["route_id"],
+                "now_stop_id": row["stop_id"],
+                "arrival_time": row["arrival_time"],
+                "dest_stop_id": res["stop_id"],
+                "dest_arrival_time": res["arrival_time"],
+            }
+            return dic
+
+    return False
 
 
 def main():
     # generate_gtfs_data()
-    # today_bus_times("市立大学前")
+    print(next_bus_time("22030_2", "51240", True))
     print("success")
 
 

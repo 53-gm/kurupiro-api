@@ -4,9 +4,12 @@ import io
 import pandas as pd
 import shutil
 import datetime
+import gtfs_realtime
 
 URL = "https://ajt-mobusta-gtfs.mcapps.jp/static/8/current_data.zip"
 DATA_DIR = "./data/gtfs-static"
+
+IDS = ("22030_2", "22030_1", "22030_52", "24140_1", "24140_2")
 
 
 # GTFS staticファイルのダウンロード
@@ -40,8 +43,16 @@ def generate_gtfs_data():
     df3 = pd.merge(df2, routes, on="route_id")
     df4 = pd.merge(df3, stops, on="stop_id")
 
+    ichipiro_route_list = df4[df4["stop_id"].apply(lambda id: id in IDS)][
+        "route_id"
+    ].to_list()
+
+    ichipiro_routes = set(ichipiro_route_list)
+
+    df5 = df4[df4["route_id"].apply(lambda id: id in ichipiro_routes)]
+
     # 保存
-    df_result = df4[
+    df_result = df5[
         [
             "trip_id",
             "stop_id",
@@ -73,9 +84,9 @@ weekday_dic = {
 }
 
 
-def find_stop_from_trip_id(trip_id, dest_stop_id, now_stop_sequence, opt=False):
-
-    df_gtfs = pd.read_csv(DATA_DIR + "/gtfs-static.csv")
+def find_stop_from_trip_id(
+    trip_id, dest_stop_id, now_stop_sequence, df_gtfs, opt=False
+):
 
     df_trip = df_gtfs[df_gtfs["trip_id"] == trip_id]
 
@@ -99,28 +110,31 @@ def next_bus_time(now_stop_id, dest_stop_id, opt=False):
 
     df_gtfs = pd.read_csv(DATA_DIR + "/gtfs-static.csv")
 
-    df_active_bus = df_gtfs[
-        (df_gtfs["stop_id"] == now_stop_id) & (df_gtfs[now_weekday] == 1)
-    ]
+    # 曜日とstop_idでフィルター
+    df_active_bus = df_gtfs[(df_gtfs[now_weekday] == 1)]
 
-    df_stop_filter_from_time = df_active_bus[
-        df_active_bus["arrival_time"].apply(lambda x: int(x[0:2]) >= now_time.hour)
-    ]
-
-    df_stop_filter_from_time["arrival_time"] = df_stop_filter_from_time[
-        "arrival_time"
-    ].apply(
+    # 時間でフィルター
+    df_active_bus.loc[:, "arrival_time"] = df_active_bus["arrival_time"].apply(
         lambda x: datetime.datetime.strptime((now_date + " " + x), "%Y-%m-%d %H:%M:%S")
     )
-    df_stop_filter_from_time = df_stop_filter_from_time.sort_values("arrival_time")
+
+    df_stop = df_active_bus[df_active_bus["stop_id"] == now_stop_id]
+
+    df_stop_filter_from_time = df_stop[df_stop["arrival_time"] > now_time].sort_values(
+        "arrival_time"
+    )
 
     for index, row in df_stop_filter_from_time.iterrows():
         res = find_stop_from_trip_id(
-            row["trip_id"], dest_stop_id, row["stop_sequence"], opt
+            row["trip_id"], dest_stop_id, row["stop_sequence"], df_active_bus, opt
         )
         if not res.empty:
 
             res = res.iloc[0]
+
+            realtime = gtfs_realtime.bus_realtime_data(
+                row["trip_id"], row["stop_sequence"]
+            )
 
             dic = {
                 "trip_id": row["trip_id"],
@@ -129,6 +143,8 @@ def next_bus_time(now_stop_id, dest_stop_id, opt=False):
                 "arrival_time": row["arrival_time"],
                 "dest_stop_id": res["stop_id"],
                 "dest_arrival_time": res["arrival_time"],
+                "delay": realtime["delay"],
+                "time_at_now_stop": realtime["time"],
             }
             return dic
 
@@ -137,7 +153,7 @@ def next_bus_time(now_stop_id, dest_stop_id, opt=False):
 
 def main():
     # generate_gtfs_data()
-    print(next_bus_time("22030_2", "51240", True))
+    print(next_bus_time("24140_1", "51240", True))
     print("success")
 
 

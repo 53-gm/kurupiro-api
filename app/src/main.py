@@ -13,5 +13,7 @@ def hello_world():
 
 
 @app.get("/api/{stop_id}/{dest_stop_id}")
-def next_bus(stop_id: str, dest_stop_id: str, opt: bool = False):
-    return gtfs_static.next_bus_time(stop_id, dest_stop_id, opt)
+def next_bus(
+    stop_id: str, dest_stop_id: str, response_size: int = 5, opt: bool = False
+):
+    return gtfs_static.next_bus_times(stop_id, dest_stop_id, response_size, opt)

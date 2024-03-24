@@ -103,7 +103,8 @@ def find_stop_from_trip_id(
     return df
 
 
-def next_bus_time(now_stop_id, dest_stop_id, opt=False):
+def next_bus_times(now_stop_id, dest_stop_id, response_size=5, opt=False):
+    response = []
     now_time = datetime.datetime.now() + datetime.timedelta(hours=9)
     now_weekday = weekday_dic[now_time.weekday()]
     now_date = now_time.strftime("%Y-%m-%d")
@@ -146,14 +147,18 @@ def next_bus_time(now_stop_id, dest_stop_id, opt=False):
                 "delay": realtime["delay"],
                 "time_at_now_stop": realtime["time"],
             }
-            return dic
 
-    return False
+            response.append(dic)
+
+            if len(response) >= response_size:
+                return response
+
+    return response
 
 
 def main():
     # generate_gtfs_data()
-    print(next_bus_time("24140_1", "51240", True))
+    print(next_bus_times("24140_1", "51240", opt=True))
     print("success")
 
 

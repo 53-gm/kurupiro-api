@@ -68,7 +68,7 @@ def bus_realtime_data(trip_id, stop_sequence):
 
 
 def main():
-    bus_realtime_data("a", "a")
+    bus_realtime_data("trip_id", "a")
     print("success")
 
 
